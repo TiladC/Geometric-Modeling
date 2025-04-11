@@ -38,12 +38,84 @@ void myMesh::checkMesh()
 	{
 		if ((*it)->twin == NULL)
 			break;
+
+		myFace* f = new myFace();
 	}
 	if (it != halfedges.end())
 		cout << "Error! Not all edges have their twins!\n";
 	else cout << "Each edge has a twin!\n";
+
+	checkSameFace();
+	checkIsTriangle();
+	check8EdgesMax();
 }
 
+void myMesh::checkSameFace() 
+{
+	bool allHalfEdgesHaveSameFace  = true;
+	for (myFace* face : faces)
+	{
+		myHalfedge* start = face->adjacent_halfedge;
+		myHalfedge* current = start;
+		myFace* currentFace = start->adjacent_face;
+
+		do
+		{
+			current = current->next;
+			if (current->adjacent_face != currentFace) {
+				allHalfEdgesHaveSameFace = false;
+				cout << "Error : A halfedge has the wrong face\n";
+			}
+		} while (current != start);
+	}
+	if (allHalfEdgesHaveSameFace) {
+		cout << "All halfedge have the right face\n";
+	}
+}
+
+void myMesh::checkIsTriangle() 
+{
+	bool isTriangle = true;
+	for (myFace* face : faces)
+	{
+		int edgeCount = 0;
+		myHalfedge* start = face->adjacent_halfedge;
+		if (start->prev != start->next->next) {
+			cout << "Error : This face is not a triangle\n";s
+			isTriangle = false;
+		}
+	}
+	if (isTriangle == true) {
+		cout << "All faces are triangles\n";
+	}
+	else {
+		cout << "Not all faces are triangles\n";
+	}
+}
+
+void myMesh::check8EdgesMax()
+{
+	bool isTriangle = true;
+	for (myFace* face : faces)
+	{
+		int edgeCount = 0;
+		myHalfedge* start = face->adjacent_halfedge;
+		myHalfedge* current = start;
+
+		do
+		{
+			edgeCount++;
+			current = current->next;
+		} while (current != start);
+
+		if (edgeCount > 8)
+		{
+			isTriangle = false;
+			cout << "Error : A face has more than 8 edges\n";
+			break;
+		}
+	}
+}
 
 bool myMesh::readFile(std::string filename)
 {

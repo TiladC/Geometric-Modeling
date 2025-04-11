@@ -14,6 +14,9 @@ public:
 	std::string name;
 
 	void checkMesh();
+	void checkSameFace();
+	void checkIsTriangle();
+	void check8EdgesMax();
 	bool readFile(std::string filename);
 	void computeNormals();
 	void normalize();
