@@ -270,9 +270,11 @@ void myMesh::triangulate() {
 bool myMesh::triangulate(myFace* f) {
 	myHalfedge* start = f->adjacent_halfedge;
 
+	// Already a triangle
 	if (start->next->next->next == start)
 		return false;
 
+	// Collect vertices from the face
 	std::vector<myVertex*> verts;
 	myHalfedge* curr = start;
 	do {
@@ -280,6 +282,7 @@ bool myMesh::triangulate(myFace* f) {
 		curr = curr->next;
 	} while (curr != start);
 
+	// Create triangle fan: verts[0] is the center
 	for (int i = 1; i < (int)verts.size() - 1; ++i) {
 		myHalfedge* e0 = new myHalfedge();
 		myHalfedge* e1 = new myHalfedge();
@@ -305,6 +308,7 @@ bool myMesh::triangulate(myFace* f) {
 		faces.push_back(tri);
 	}
 
+	// Delete old halfedges and face
 	myHalfedge* h = start;
 	do {
 		myHalfedge* next = h->next;
