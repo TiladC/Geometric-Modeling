@@ -171,6 +171,8 @@ bool myMesh::readFile(std::string filename)
 				hedges[i]->next = hedges[iplusone];
 				hedges[i]->prev = hedges[iminusone];
 				hedges[i]->source = vertices[faceids[i]];
+				if (!vertices[faceids[i]]->originof)
+					vertices[faceids[i]]->originof = hedges[i];
 				hedges[i]->adjacent_face = f;
 
 				auto twin_key = make_pair(faceids[iplusone], faceids[i]);
@@ -198,7 +200,15 @@ bool myMesh::readFile(std::string filename)
 
 void myMesh::computeNormals()
 {
-	/**** TODO ****/
+	// 1. Compute face normals
+	for (myFace* face : faces) {
+		face->computeNormal();
+	}
+
+	// 2. Compute vertex normals
+	for (myVertex* vertex : vertices) {
+		vertex->computeNormal();
+	}
 }
 
 void myMesh::normalize()
@@ -280,6 +290,7 @@ bool myMesh::triangulate(myFace* f) {
 		curr = curr->next;
 	} while (curr != start);
 
+	std::vector<myHalfedge*> new_halfedges;
 	for (int i = 1; i < (int)verts.size() - 1; ++i) {
 		myHalfedge* e0 = new myHalfedge();
 		myHalfedge* e1 = new myHalfedge();
@@ -299,6 +310,10 @@ bool myMesh::triangulate(myFace* f) {
 		e1->adjacent_face = tri;
 		e2->adjacent_face = tri;
 
+		new_halfedges.push_back(e0);
+		new_halfedges.push_back(e1);
+		new_halfedges.push_back(e2);
+
 		halfedges.push_back(e0);
 		halfedges.push_back(e1);
 		halfedges.push_back(e2);
@@ -316,8 +331,14 @@ bool myMesh::triangulate(myFace* f) {
 	faces.erase(std::remove(faces.begin(), faces.end(), f), faces.end());
 	delete f;
 
+	for (myVertex* v : verts) {
+		for (myHalfedge* h : new_halfedges) {
+			if (h->source == v) {
+				v->originof = h;
+				break;
+			}
+		}
+	}
+
 	return true;
 }
-
-
-

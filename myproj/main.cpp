@@ -247,23 +247,33 @@ void display()
 	if (drawsilhouette)
 	{
 		glLineWidth(4.0);
-		color[0] = 1.0f, color[1] = 0.0f, color[2] = 0.0f, color[3] = 1.0f;		
+		color[0] = 1.0f, color[1] = 0.0f, color[2] = 0.0f, color[3] = 1.0f;
 		glUniform4fv(glGetUniformLocation(shaderprogram, "kd"), 1, &color[0]);
 
-		vector <GLuint> silhouette_edges;
-		for (vector<myHalfedge *>::iterator it = m->halfedges.begin(); it != m->halfedges.end(); it++)
+		vector<GLuint> silhouette_edges;
+		for (myHalfedge* e : m->halfedges)
 		{
-			/**** TODO: WRITE CODE TO COMPUTE SILHOUETTE ****/
-			myHalfedge *e = (*it);
-			myVertex *v1 = (*it)->source;
-			if ((*it)->twin == NULL) continue;
-			myVertex *v2 = (*it)->twin->source;
+			if (!e->twin || !e->adjacent_face || !e->twin->adjacent_face)
+				continue;
 
-			if ( 0 /*ADD THE CONDITION TO CHECK IF THE HALFEDGE DEFINED BY (V1, V2) IS A SILHOUETTE EDGE*/ )
-			{
+			myVertex* v1 = e->source;
+			myVertex* v2 = e->twin->source;
+
+			myVector3D* n1 = e->adjacent_face->normal;
+			myVector3D* n2 = e->twin->adjacent_face->normal;
+
+			myVector3D view(camera_eye.X - v1->point->X,
+				camera_eye.Y - v1->point->Y,
+				camera_eye.Z - v1->point->Z);
+			view.normalize();
+
+			float dot1 = n1->dot(view);
+			float dot2 = n2->dot(view);
+
+			if ((dot1 > 0 && dot2 < 0) || (dot1 < 0 && dot2 > 0)) {
 				silhouette_edges.push_back(v1->index);
 				silhouette_edges.push_back(v2->index);
-			}				
+			}
 		}
 
 		GLuint silhouette_edges_buffer;
@@ -284,7 +294,8 @@ void display()
 		glDrawElements(GL_LINES, silhouette_edges.size(), GL_UNSIGNED_INT, 0);
 
 		glDeleteBuffers(1, &silhouette_edges_buffer);
- 	}
+	}
+
 
 	if (drawnormals && vaos[VAO_NORMALS])
 	{

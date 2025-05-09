@@ -11,6 +11,10 @@ myVector3D::myVector3D(double dx, double dy, double dz)
     dZ = dz;
 }
 
+float myVector3D::dot(const myVector3D& other) const {
+	return dX * other.dX + dY * other.dY + dZ * other.dZ;
+}
+
 double myVector3D::operator*(myVector3D & v1)
 {
     return (v1.dX*dX + v1.dY*dY + v1.dZ*dZ);
