@@ -24,16 +24,14 @@ void myVertex::computeNormal() {
     myHalfedge* start = originof;
     myHalfedge* current = start;
 
-    // Traverse all incident faces
     do {
-        // Check if adjacent_face is not null and valid
+
         if (!current || !current->adjacent_face || !current->adjacent_face->normal)
             break;
 
         if (current->adjacent_face && current->adjacent_face->normal &&
             visitedFaces.find(current->adjacent_face) == visitedFaces.end()) {
 
-            // Safely access the face normal
             myVector3D* faceNormal = current->adjacent_face->normal;
             normal->dX += faceNormal->dX;
             normal->dY += faceNormal->dY;
@@ -42,14 +40,12 @@ void myVertex::computeNormal() {
             visitedFaces.insert(current->adjacent_face);
         }
 
-        // Check if the twin is valid before accessing it
         if (!current->twin || !current->twin->next) break;
 
         current = current->twin->next;
 
     } while (current != start && current != nullptr);
 
-    // In case no faces were found (degenerate), leave default normal
     if (!visitedFaces.empty()) {
         normal->normalize();
     }

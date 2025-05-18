@@ -43,6 +43,11 @@ void menu(int item)
 {
 	switch(item)
 	{
+	case MENU_SIMPLIFY:
+		{
+			m->simplify();
+			break;
+		}
 	case MENU_TRIANGULATE:
 		{
 			m->triangulate();

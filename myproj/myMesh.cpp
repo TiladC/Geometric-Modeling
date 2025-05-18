@@ -193,19 +193,16 @@ bool myMesh::readFile(std::string filename)
 	}
 	checkMesh();
 	normalize();
-
 	return true;
 }
 
 
 void myMesh::computeNormals()
 {
-	// 1. Compute face normals
 	for (myFace* face : faces) {
 		face->computeNormal();
 	}
 
-	// 2. Compute vertex normals
 	for (myVertex* vertex : vertices) {
 		vertex->computeNormal();
 	}
@@ -341,4 +338,43 @@ bool myMesh::triangulate(myFace* f) {
 	}
 
 	return true;
+}
+
+void myMesh::simplify() {
+	myHalfedge* halfedge = findShortestEdge();
+	myHalfedge* nexth = halfedge->next;
+	myHalfedge* twinh = halfedge->twin;
+	myHalfedge* start = halfedge;
+	myHalfedge* current = halfedge;
+	myHalfedge* currenttwin = twinh;
+	myHalfedge* starttwin = twinh;
+
+	while (current != start) {
+		current = current->next;
+		delete(current);
+	}
+
+	while (currenttwin != starttwin) {
+		currenttwin = currenttwin->next;
+		delete(currenttwin);
+	}
+
+	delete(halfedge);
+}
+
+myHalfedge* myMesh::findShortestEdge() {
+	double shortestLength = 0;
+	myHalfedge* shortestHalfedge;
+	for (myHalfedge* halfedge : halfedges) {
+		myHalfedge* nexth = halfedge->next;
+		myPoint3D p1 = *halfedge->source->point;
+		myPoint3D p2 = *nexth->source->point;
+		myVector3D vect(p2.X - p1.X, p2.Y - p1.Y, p2.Z - p1.Z);
+		if (vect.length() < shortestLength || shortestLength == 0) {
+			shortestLength = vect.length();
+			shortestHalfedge = halfedge;
+		}
+	}
+	cout << shortestLength;
+	return shortestHalfedge;
 }

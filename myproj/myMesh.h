@@ -20,6 +20,8 @@ public:
 	bool readFile(std::string filename);
 	void computeNormals();
 	void normalize();
+	void simplify();
+	myHalfedge* findShortestEdge();
 
 	void subdivisionCatmullClark();
 
