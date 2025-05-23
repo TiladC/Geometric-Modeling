@@ -21,6 +21,10 @@ public:
 	void computeNormals();
 	void normalize();
 	void simplify();
+
+	void removeVertex(myVertex* v);
+	void removeFace(myFace* f);
+	void removeHalfedge(myHalfedge* h);
 	myHalfedge* findShortestEdge();
 
 	void subdivisionCatmullClark();

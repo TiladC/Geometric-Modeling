@@ -119,82 +119,88 @@ void myMesh::check8EdgesMax()
 
 bool myMesh::readFile(std::string filename)
 {
-	string s, t, u;
-	vector<int> faceids;
-	myHalfedge** hedges;
-
-	ifstream fin(filename);
+	std::ifstream fin(filename);
 	if (!fin.is_open()) {
-		cout << "Unable to open file!\n";
+		std::cerr << "Unable to open file: " << filename << std::endl;
 		return false;
 	}
-	name = filename;
 
-	map<pair<int, int>, myHalfedge*> twin_map;
+	std::string line, prefix, token;
+	std::map<std::pair<int, int>, myHalfedge*> twin_map;
 
-	while (getline(fin, s))
-	{
-		stringstream myline(s);
-		myline >> t;
-		if (t == "g") {}
-		else if (t == "v")
-		{
+	while (std::getline(fin, line)) {
+		std::stringstream ss(line);
+		ss >> prefix;
+
+		if (prefix == "v") {
 			float x, y, z;
-			myline >> x >> y >> z;
-			myPoint3D* point = new myPoint3D(x, y, z);
-			myVertex* vertex = new myVertex();
-			vertex->point = point;
-			vertices.push_back(vertex);
-			cout << "v " << x << " " << y << " " << z << endl;
+			ss >> x >> y >> z;
+			myVertex* v = new myVertex();
+			v->point = new myPoint3D(x, y, z);
+			vertices.push_back(v);
 		}
-		else if (t == "mtllib") {}
-		else if (t == "usemtl") {}
-		else if (t == "s") {}
-		else if (t == "f") {
-			faceids.clear();
-			while (myline >> u)
-				faceids.push_back(atoi((u.substr(0, u.find("/"))).c_str()) - 1);
+		else if (prefix == "f") {
+			std::vector<int> faceids;
+			while (ss >> token) {
+				size_t slash = token.find("/");
+				int id = std::stoi((slash == std::string::npos) ? token : token.substr(0, slash));
+				faceids.push_back(id - 1); // OBJ is 1-based
+			}
+
 			if (faceids.size() < 3)
 				continue;
 
-			hedges = new myHalfedge * [faceids.size()];
-			for (unsigned int i = 0; i < faceids.size(); i++)
-				hedges[i] = new myHalfedge();
+			myFace* face = new myFace();
+			faces.push_back(face);
 
-			myFace* f = new myFace();
-			f->adjacent_halfedge = hedges[0];
+			std::vector<myHalfedge*> hedges;
+			for (size_t i = 0; i < faceids.size(); ++i) {
+				myHalfedge* he = new myHalfedge();
+				he->adjacent_face = face;
+				he->source = vertices[faceids[i]];
+				hedges.push_back(he);
+				halfedges.push_back(he);
+			}
 
-			for (unsigned int i = 0; i < faceids.size(); i++) {
-				int iplusone = (i + 1) % faceids.size();
-				int iminusone = (i - 1 + faceids.size()) % faceids.size();
+			// Link 'next' pointers in circular fashion
+			for (size_t i = 0; i < hedges.size(); ++i) {
+				hedges[i]->next = hedges[(i + 1) % hedges.size()];
+			}
 
-				hedges[i]->next = hedges[iplusone];
-				hedges[i]->prev = hedges[iminusone];
-				hedges[i]->source = vertices[faceids[i]];
-				if (!vertices[faceids[i]]->originof)
-					vertices[faceids[i]]->originof = hedges[i];
-				hedges[i]->adjacent_face = f;
+			face->adjacent_halfedge = hedges[0];
 
-				auto twin_key = make_pair(faceids[iplusone], faceids[i]);
-				auto it = twin_map.find(twin_key);
+			// Build twin links
+			for (size_t i = 0; i < hedges.size(); ++i) {
+				int from = faceids[i];
+				int to = faceids[(i + 1) % faceids.size()];
+				auto key = std::make_pair(to, from); // search reverse
+
+				auto it = twin_map.find(key);
 				if (it != twin_map.end()) {
 					hedges[i]->twin = it->second;
 					it->second->twin = hedges[i];
 				}
 				else {
-					twin_map[make_pair(faceids[i], faceids[iplusone])] = hedges[i];
+					twin_map[std::make_pair(from, to)] = hedges[i];
 				}
-
-				halfedges.push_back(hedges[i]);
 			}
 
-			faces.push_back(f);
+			// Assign originof if not already set
+			for (size_t i = 0; i < faceids.size(); ++i) {
+				if (vertices[faceids[i]]->originof == nullptr) {
+					vertices[faceids[i]]->originof = hedges[i];
+				}
+			}
 		}
 	}
-	checkMesh();
-	normalize();
+
+	checkMesh();   // Optional mesh validation
+	normalize();   // Optional rescaling/centering
+
 	return true;
 }
+
+
 
 
 void myMesh::computeNormals()
@@ -344,27 +350,95 @@ void myMesh::simplify() {
 	myHalfedge* halfedge = findShortestEdge();
 	myHalfedge* nexth = halfedge->next;
 	myHalfedge* twinh = halfedge->twin;
+	for (auto h : this->halfedges) {
+		if (!h->twin) {
+			std::cout << "This halfege has no twin";
+		}
+		else {
+			std::cout << "HAS TWIN";
+		}
+	}
+	int twins = 0;
+	for (auto h : halfedges) {
+		if (h->twin) twins++;
+	}
+	std::cout << "Total halfedges: " << halfedges.size() << "\n";
+	std::cout << "Halfedges with twins: " << twins << "\n";
+	if (!halfedge || !halfedge->twin) {
+		std::cout << "Skipping simplification: no valid twin found.\n";
+		return;
+	}
+	if (twinh == nullptr) {
+		std::cout << "twinh is nullptr";
+	}
+	/*
 	myHalfedge* start = halfedge;
 	myHalfedge* current = halfedge;
 	myHalfedge* currenttwin = twinh;
 	myHalfedge* starttwin = twinh;
+	*/
+	myHalfedge* nexttwin = nexth->twin;
+	myHalfedge* twinnexttwin = twinh->next->twin;
+	
 
+	nexth->twin = nexth->next->twin;
+	nexth->next->twin = nexttwin;
+
+	twinh->next->twin = twinh->next->next->twin;
+	twinh->next->next->twin = twinnexttwin;
+
+	halfedge->source = nexth->source;
+	
+	removeVertex(nexth->source);
+
+	removeFace(halfedge->adjacent_face);
+	removeFace(twinh->adjacent_face);
+
+	removeHalfedge(nexttwin->next);
+	removeHalfedge(nexttwin);
+	removeHalfedge(twinh);
+	removeHalfedge(nexth->next);
+	removeHalfedge(nexth);
+	removeHalfedge(halfedge);
+
+	
+	
+	/*
 	while (current != start) {
 		current = current->next;
-		delete(current);
+		removeHalfedge(current);
 	}
+	
 
 	while (currenttwin != starttwin) {
 		currenttwin = currenttwin->next;
-		delete(currenttwin);
+		removeHalfedge(currenttwin);
 	}
+	*/
 
-	delete(halfedge);
+}
+
+void myMesh::removeVertex(myVertex* v) {
+	auto it = std::find(vertices.begin(), vertices.end(), v);
+	vertices.erase(it);
+	delete v;
+}
+
+void myMesh::removeFace(myFace* f) {
+	auto it = std::find(faces.begin(), faces.end(), f);
+	faces.erase(it);
+	delete f;
+}
+
+void myMesh::removeHalfedge(myHalfedge* h) {
+	auto it = std::find(halfedges.begin(), halfedges.end(), h);
+	halfedges.erase(it);
+	delete h;
 }
 
 myHalfedge* myMesh::findShortestEdge() {
 	double shortestLength = 0;
-	myHalfedge* shortestHalfedge;
+	myHalfedge* shortestHalfedge = halfedges[0];
 	for (myHalfedge* halfedge : halfedges) {
 		myHalfedge* nexth = halfedge->next;
 		myPoint3D p1 = *halfedge->source->point;
