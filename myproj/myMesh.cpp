@@ -6,6 +6,8 @@
 #include <utility>
 #include <GL/glew.h>
 #include "myvector3d.h"
+#include <unordered_set>
+#include <algorithm>
 
 using namespace std;
 
@@ -162,9 +164,10 @@ bool myMesh::readFile(std::string filename)
 				halfedges.push_back(he);
 			}
 
-			// Link 'next' pointers in circular fashion
+			// Set 'next' and 'prev' pointers
 			for (size_t i = 0; i < hedges.size(); ++i) {
 				hedges[i]->next = hedges[(i + 1) % hedges.size()];
+				hedges[i]->prev = hedges[(i + hedges.size() - 1) % hedges.size()];
 			}
 
 			face->adjacent_halfedge = hedges[0];
@@ -199,6 +202,7 @@ bool myMesh::readFile(std::string filename)
 
 	return true;
 }
+
 
 
 
@@ -269,8 +273,9 @@ void myMesh::splitFaceQUADS(myFace *f, myPoint3D *p)
 
 void myMesh::subdivisionCatmullClark()
 {
-	/**** TODO ****/
+
 }
+
 
 
 void myMesh::triangulate() {
@@ -280,143 +285,151 @@ void myMesh::triangulate() {
 	}
 }
 
-bool myMesh::triangulate(myFace* f) {
+bool myMesh::triangulate(myFace* f)
+{
+	
 	myHalfedge* start = f->adjacent_halfedge;
 
 	if (start->next->next->next == start)
 		return false;
 
-	std::vector<myVertex*> verts;
-	myHalfedge* curr = start;
-	do {
-		verts.push_back(curr->source);
-		curr = curr->next;
-	} while (curr != start);
+	myVertex* commonSource = start->source;
+	myHalfedge* current = start;
+	myFace* currentFace = f;
 
-	std::vector<myHalfedge*> new_halfedges;
-	for (int i = 1; i < (int)verts.size() - 1; ++i) {
-		myHalfedge* e0 = new myHalfedge();
-		myHalfedge* e1 = new myHalfedge();
-		myHalfedge* e2 = new myHalfedge();
+	while (current->next->next->next != current) {
+		myHalfedge* he1 = new myHalfedge();
+		myHalfedge* he2 = new myHalfedge();
 
-		myFace* tri = new myFace();
-		tri->adjacent_halfedge = e0;
+		he1->twin = he2;
+		he2->twin = he1;
 
-		e0->source = verts[0];
-		e1->source = verts[i];
-		e2->source = verts[i + 1];
+		he1->source = current->next->next->source;
+		he2->source = commonSource;
 
-		e0->next = e1; e1->next = e2; e2->next = e0;
-		e0->prev = e2; e1->prev = e0; e2->prev = e1;
+		myFace* newFace = new myFace();
+		newFace->adjacent_halfedge = he2;
 
-		e0->adjacent_face = tri;
-		e1->adjacent_face = tri;
-		e2->adjacent_face = tri;
+		myHalfedge* he2Next = current->next->next;
+		myHalfedge* he2Prev = current->prev;
 
-		new_halfedges.push_back(e0);
-		new_halfedges.push_back(e1);
-		new_halfedges.push_back(e2);
+		he1->next = current;
+		he1->prev = current->next;
+		current->next->next = he1;
+		current->prev = he1;
 
-		halfedges.push_back(e0);
-		halfedges.push_back(e1);
-		halfedges.push_back(e2);
-		faces.push_back(tri);
-	}
+		he2->next = he2Next;
+		he2->prev = he2Prev;
+		he2Next->prev = he2;
+		he2Prev->next = he2;
 
-	myHalfedge* h = start;
-	do {
-		myHalfedge* next = h->next;
-		halfedges.erase(std::remove(halfedges.begin(), halfedges.end(), h), halfedges.end());
-		delete h;
-		h = next;
-	} while (h != start);
+		myHalfedge* cur = he2;
+		do {
+			cur->adjacent_face = newFace;
+			cur = cur->next;
+		} while (cur != he2);
 
-	faces.erase(std::remove(faces.begin(), faces.end(), f), faces.end());
-	delete f;
+		he1->adjacent_face = currentFace;
 
-	for (myVertex* v : verts) {
-		for (myHalfedge* h : new_halfedges) {
-			if (h->source == v) {
-				v->originof = h;
-				break;
-			}
-		}
+		faces.push_back(newFace);
+		halfedges.push_back(he1);
+		halfedges.push_back(he2);
+
+		current = he2;
 	}
 
 	return true;
 }
 
 void myMesh::simplify() {
-	myHalfedge* halfedge = findShortestEdge();
-	myHalfedge* nexth = halfedge->next;
-	myHalfedge* twinh = halfedge->twin;
-	for (auto h : this->halfedges) {
-		if (!h->twin) {
-			std::cout << "This halfege has no twin";
-		}
-		else {
-			std::cout << "HAS TWIN";
-		}
-	}
-	int twins = 0;
-	for (auto h : halfedges) {
-		if (h->twin) twins++;
-	}
-	std::cout << "Total halfedges: " << halfedges.size() << "\n";
-	std::cout << "Halfedges with twins: " << twins << "\n";
-	if (!halfedge || !halfedge->twin) {
-		std::cout << "Skipping simplification: no valid twin found.\n";
+	myHalfedge* he = findShortestEdge();
+	if (!he || !he->twin) return;
+
+	myHalfedge* heTwin = he->twin;
+	myVertex* v1 = he->source;
+	myVertex* v2 = he->next->source;
+
+	if (!v1 || !v2 || v1 == v2) {
+		std::cerr << "Triangulez pour aller plus loin" << std::endl;
 		return;
 	}
-	if (twinh == nullptr) {
-		std::cout << "twinh is nullptr";
+
+	myPoint3D* mid = new myPoint3D(
+		(v1->point->X + v2->point->X) / 2,
+		(v1->point->Y + v2->point->Y) / 2,
+		(v1->point->Z + v2->point->Z) / 2
+	);
+	myVertex* newVertex = new myVertex();
+	newVertex->point = mid;
+	vertices.push_back(newVertex);
+
+	for (myHalfedge* h : halfedges) {
+		if (h && h->source && (h->source == v1 || h->source == v2)) {
+			h->source = newVertex;
+		}
 	}
-	/*
-	myHalfedge* start = halfedge;
-	myHalfedge* current = halfedge;
-	myHalfedge* currenttwin = twinh;
-	myHalfedge* starttwin = twinh;
-	*/
-	myHalfedge* nexttwin = nexth->twin;
-	myHalfedge* twinnexttwin = twinh->next->twin;
-	
 
-	nexth->twin = nexth->next->twin;
-	nexth->next->twin = nexttwin;
+	std::vector<myHalfedge*> heToRemove;
 
-	twinh->next->twin = twinh->next->next->twin;
-	twinh->next->next->twin = twinnexttwin;
+	auto collectHalfedgesFromFace = [&](myFace* f) {
+		vertices.erase(std::remove(vertices.begin(), vertices.end(), nullptr), vertices.end());
+		faces.erase(std::remove(faces.begin(), faces.end(), nullptr), faces.end());
+		halfedges.erase(std::remove(halfedges.begin(), halfedges.end(), nullptr), halfedges.end());
+		if (!f || !f->adjacent_halfedge) return;
+		myHalfedge* start = f->adjacent_halfedge;
+		myHalfedge* h = start;
+		std::unordered_set<myHalfedge*> visited;
+		int count = 0;
 
-	halfedge->source = nexth->source;
-	
-	removeVertex(nexth->source);
+		const int max_edges = 1000;
+		do {
+			if (!h || visited.count(h) || count++ > max_edges) {
+				std::cerr << "Triangulez pour aller plus loin" << std::endl;
+				return;
+			}
+			visited.insert(h);
+			heToRemove.push_back(h);
+			h = h->next;
+		} while (h != start);
+		};
 
-	removeFace(halfedge->adjacent_face);
-	removeFace(twinh->adjacent_face);
+	collectHalfedgesFromFace(he->adjacent_face);
+	collectHalfedgesFromFace(heTwin->adjacent_face);
 
-	removeHalfedge(nexttwin->next);
-	removeHalfedge(nexttwin);
-	removeHalfedge(twinh);
-	removeHalfedge(nexth->next);
-	removeHalfedge(nexth);
-	removeHalfedge(halfedge);
+	auto faceSize = [](myFace* f) {
+		if (!f || !f->adjacent_halfedge) return 0;
+		myHalfedge* start = f->adjacent_halfedge;
+		myHalfedge* h = start;
+		int count = 0;
+		do {
+			h = h->next;
+			count++;
+		} while (h && h != start && count < 100);
+		return count;
+		};
 
-	
-	
-	/*
-	while (current != start) {
-		current = current->next;
-		removeHalfedge(current);
+	int f1size = faceSize(he->adjacent_face);
+	int f2size = faceSize(heTwin->adjacent_face);
+
+	if (f1size != 3 || f2size != 3) {
+		std::cerr << "Triangulez pour aller plus loin" << std::endl;
+		return;
 	}
-	
 
-	while (currenttwin != starttwin) {
-		currenttwin = currenttwin->next;
-		removeHalfedge(currenttwin);
+
+	removeFace(he->adjacent_face);
+	removeFace(heTwin->adjacent_face);
+
+	for (myHalfedge* h : heToRemove) {
+		removeHalfedge(h);
 	}
-	*/
 
+	removeVertex(v1);
+	removeVertex(v2);
+
+	std::cout << "Simplification réussie." << std::endl;
 }
+
 
 void myMesh::removeVertex(myVertex* v) {
 	auto it = std::find(vertices.begin(), vertices.end(), v);
