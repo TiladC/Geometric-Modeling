@@ -273,9 +273,147 @@ void myMesh::splitFaceQUADS(myFace *f, myPoint3D *p)
 
 void myMesh::subdivisionCatmullClark()
 {
+	std::vector<myVertex*> new_vertices;
+	std::vector<myFace*> new_faces;
+	std::vector<myHalfedge*> new_halfedges;
 
+	std::map<myFace*, myVertex*> face_points;
+	std::map<myHalfedge*, myVertex*> edge_points;
+	std::map<myVertex*, myVertex*> updated_vertices;
+
+	for (myFace* f : this->faces)
+	{
+		myPoint3D* center_p = new myPoint3D(0, 0, 0);
+		int vertex_count = 0;
+		myHalfedge* h_start = f->adjacent_halfedge;
+		myHalfedge* h_current = h_start;
+		do
+		{
+			*center_p = *center_p + *(h_current->source->point);
+			vertex_count++;
+			h_current = h_current->next;
+		} while (h_current != h_start);
+
+		*center_p = *center_p / static_cast<float>(vertex_count);
+
+		myVertex* v_face = new myVertex();
+		v_face->point = center_p;
+		face_points[f] = v_face;
+		new_vertices.push_back(v_face);
+	}
+
+	for (myHalfedge* h : this->halfedges)
+	{
+		if (edge_points.find(h) == edge_points.end())
+		{
+			myPoint3D* edge_p = new myPoint3D(0, 0, 0);
+			*edge_p = *edge_p + *(h->source->point);
+			*edge_p = *edge_p + *(h->twin->source->point);
+			*edge_p = *edge_p + *(face_points[h->adjacent_face]->point);
+			*edge_p = *edge_p + *(face_points[h->twin->adjacent_face]->point);
+			*edge_p = *edge_p / 4.0f;
+
+			myVertex* v_edge = new myVertex();
+			v_edge->point = edge_p;
+			edge_points[h] = v_edge;
+			edge_points[h->twin] = v_edge;
+			new_vertices.push_back(v_edge);
+		}
+	}
+
+	for (myVertex* v_orig : this->vertices)
+	{
+		myPoint3D avg_face_points(0, 0, 0);
+		myPoint3D avg_edge_midpoints(0, 0, 0);
+		int n = 0;
+
+		myHalfedge* h_start = v_orig->originof;
+		myHalfedge* h_current = h_start;
+		do
+		{
+			avg_face_points = avg_face_points + *(face_points[h_current->adjacent_face]->point);
+
+			myPoint3D edge_midpoint = (*(h_current->source->point) + *(h_current->twin->source->point)) / 2.0f;
+			avg_edge_midpoints = avg_edge_midpoints + edge_midpoint;
+
+			n++;
+			h_current = h_current->twin->next;
+		} while (h_current != h_start);
+
+		avg_face_points = avg_face_points / static_cast<float>(n);
+		avg_edge_midpoints = avg_edge_midpoints / static_cast<float>(n);
+
+		myPoint3D* new_pos = new myPoint3D(
+			(avg_face_points.X + 2 * avg_edge_midpoints.X + v_orig->point->X * (n - 3)) / n,
+			(avg_face_points.Y + 2 * avg_edge_midpoints.Y + v_orig->point->Y * (n - 3)) / n,
+			(avg_face_points.Z + 2 * avg_edge_midpoints.Z + v_orig->point->Z * (n - 3)) / n
+		);
+
+		myVertex* v_updated = new myVertex();
+		v_updated->point = new_pos;
+		updated_vertices[v_orig] = v_updated;
+		new_vertices.push_back(v_updated);
+	}
+
+	for (myFace* f_orig : this->faces)
+	{
+		myHalfedge* h_start = f_orig->adjacent_halfedge;
+		myHalfedge* h_current = h_start;
+		do
+		{
+			myVertex* v1 = face_points[f_orig];
+			myVertex* v2 = edge_points[h_current];
+			myVertex* v3 = updated_vertices[h_current->source];
+			myVertex* v4 = edge_points[h_current->prev];
+
+			myFace* new_q = new myFace();
+			myHalfedge* h1 = new myHalfedge(); h1->source = v1; h1->adjacent_face = new_q;
+			myHalfedge* h2 = new myHalfedge(); h2->source = v2; h2->adjacent_face = new_q;
+			myHalfedge* h3 = new myHalfedge(); h3->source = v3; h3->adjacent_face = new_q;
+			myHalfedge* h4 = new myHalfedge(); h4->source = v4; h4->adjacent_face = new_q;
+
+			h1->next = h2; h2->next = h3; h3->next = h4; h4->next = h1;
+			h1->prev = h4; h2->prev = h1; h3->prev = h2; h4->prev = h3;
+
+			v1->originof = h1;
+			v2->originof = h2;
+			v3->originof = h3;
+			v4->originof = h4;
+
+			new_q->adjacent_halfedge = h1;
+
+			new_faces.push_back(new_q);
+			new_halfedges.push_back(h1); new_halfedges.push_back(h2);
+			new_halfedges.push_back(h3); new_halfedges.push_back(h4);
+
+			h_current = h_current->next;
+		} while (h_current != h_start);
+	}
+	
+	clear();
+
+	this->vertices = new_vertices;
+	this->faces = new_faces;
+	this->halfedges = new_halfedges;
+
+	std::map<std::pair<myVertex*, myVertex*>, myHalfedge*> twin_finder;
+	for (myHalfedge* h : this->halfedges)
+	{
+		myVertex* v_start = h->source;
+		myVertex* v_end = h->next->source;
+		auto it = twin_finder.find({ v_end, v_start });
+		if (it != twin_finder.end())
+		{
+			h->twin = it->second;
+			it->second->twin = h;
+			twin_finder.erase(it);
+		}
+		else
+		{
+			twin_finder[{v_start, v_end}] = h;
+		}
+	}
 }
-
 
 
 void myMesh::triangulate() {
